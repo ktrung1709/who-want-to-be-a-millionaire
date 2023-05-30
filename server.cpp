@@ -10,6 +10,7 @@
 #include <algorithm>
 
 
+
 #define MAX_CLIENTS 2
 #define BUFFER_SIZE 1024
 
@@ -117,7 +118,9 @@ void handleClient(int clientSocket) {
     }
 
     // Send client's score
-    std::string scoreMessage = "Your score: " + std::to_string(client.score);
+    std::string scoreMessage = "Your score: " + std::to_string(client.score) + "\n";
+    
+    std::cout<<scoreMessage<<std::endl;
     if (send(clientSocket, scoreMessage.c_str(), scoreMessage.length(), 0) <= 0) {
         std::cout << "Error sending score" << std::endl;
     }

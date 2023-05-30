@@ -87,6 +87,7 @@ int main() {
     if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
         std::cerr << "Error receiving score" << std::endl;
     } else {
+        buffer[BUFFER_SIZE - 1] = '\0';
         std::cout << buffer << std::endl;
     }
 
