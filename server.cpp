@@ -9,9 +9,7 @@
 #include <unistd.h>
 #include <algorithm>
 
-
-
-#define MAX_CLIENTS 2
+#define MAX_CLIENTS 20
 #define BUFFER_SIZE 1024
 
 std::mutex mutex;
@@ -22,38 +20,38 @@ struct Client {
     int score;
 };
 
+
+struct Question {
+    int level;
+    std::string content;
+    std::vector<std::string> answerList;
+    std::string correctAnswer;
+};
+
+
+std::vector<Question> questions = {
+    {1, "What is the capital of France?", {"London", "Paris", "Berlin", "Madrid"}, "Paris"},
+    {2, "Who wrote the novel 'Pride and Prejudice'?", {"Jane Austen", "Charles Dickens", "Mark Twain", "Leo Tolstoy"}, "Jane Austen"},
+    {3, "What is the chemical symbol for the element Gold?", {"Go", "Gd", "Au", "Ag"}, "Au"},
+    {4, "Which planet is known as the Red Planet?", {"Mars", "Venus", "Jupiter", "Saturn"}, "Mars"},
+    {5, "What is the largest ocean on Earth?", {"Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean"}, "Pacific Ocean"}
+};
+
+
 std::vector<Client> clients;
 
 
-// Sample questions
-const std::vector<std::string> questions = {
-    "What is the capital of France?",
-    "Who wrote the novel 'Pride and Prejudice'?",
-    "What is the chemical symbol for the element Gold?",
-    "Which planet is known as the Red Planet?",
-    "What is the largest ocean on Earth?"
-};
-
-// Sample answers for the questions
-const std::vector<std::string> answers = {
-    "Paris",
-    "Jane Austen",
-    "Au",
-    "Mars",
-    "Pacific Ocean"
-};
-
 void handleClient(int clientSocket) {
-    // int byte_sent, byte_received;
-    int questionIndex = 0;
     if (send(clientSocket, "Welcome Client", sizeof("Welcome Client"), 0) <= 0) {
-        std::cerr << "Error receiving welcome message" << std::endl;
+        std::cerr << "Error sending welcome message" << std::endl;
         close(clientSocket);
         return;
     }
 
+
     char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);
+
 
     // Receive client's name
     if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
@@ -61,6 +59,7 @@ void handleClient(int clientSocket) {
         close(clientSocket);
         return;
     }
+
 
     // Add the client to the list
     mutex.lock();
@@ -71,61 +70,92 @@ void handleClient(int clientSocket) {
     clients.push_back(client);
     mutex.unlock();
 
+
     std::cout << "Client connected: " << client.name << std::endl;
+
 
     // Game loop
     while (true) {
-        // Send question to the client
-        std::string question = questions[questionIndex];
-        if (send(clientSocket, question.c_str(), question.length(), 0) <= 0) {
-            std::cout << "Error sending question" << std::endl;
-            break;
-        }
-
-        // Receive client's answer
         memset(buffer, 0, BUFFER_SIZE);
+        std::cout << buffer << std::endl;
         if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
-            std::cout << "Error receiving answer" << std::endl;
-            break;
+            std::cout << "Error receiving client message" << std::endl;
+            close(clientSocket);
+            return;
         }
+        else if (strcmp(buffer, "START_GAME") == 0)
+        {
+            
+            int questionIndex = 0;
 
-        // Check client's answer
-        std::string answer = answers[questionIndex];
-        std::string clientAnswer = buffer;
-        if (clientAnswer == answer) {
-            // Correct answer
-            mutex.lock();
-            client.score++;
-            mutex.unlock();
+            while (true) {
+                // Check if all questions have been sent
+                if (questionIndex >= questions.size()) {
+                    break;
+                }
 
-            std::cout << "Client " << client.name << " answered correctly" << std::endl;
-        }
-        else{
-            if (send(clientSocket, "GAME_OVER", sizeof("GAME_OVER"), 0) <= 0) {
-                std::cout << "Error sending end game signal" << std::endl;
-                break;
+
+                // Get the current question
+                Question currentQuestion = questions[questionIndex];
+
+
+                // Construct the message containing the question content and answer options
+                std::string message = "Question Level: " + std::to_string(currentQuestion.level) + "\n";
+                message += currentQuestion.content + "\n";
+
+
+                for (const std::string& answer : currentQuestion.answerList) {
+                    message += answer + "\n";
+                }
+
+
+                // Send the message to the client
+                if (send(clientSocket, message.c_str(), message.length(), 0) <= 0) {
+                    std::cout << "Error sending question" << std::endl;
+                    break;
+                }
+
+
+                // Receive client's answer
+                char buffer[BUFFER_SIZE];
+                memset(buffer, 0, BUFFER_SIZE);
+                if (recv(clientSocket, buffer, BUFFER_SIZE, 0) <= 0) {
+                    std::cout << "Error receiving answer" << std::endl;
+                    break;
+                }
+
+
+                // Check client's answer
+                std::string clientAnswer = buffer;
+                if (clientAnswer == currentQuestion.correctAnswer) {
+                    std::cout << "Client answered correctly" << std::endl;
+                    client.score++;
+                } else {
+                    std::cout << "Client answered incorrectly" << std::endl;
+
+                    // Send the GAME_OVER message to the client
+                    if (send(clientSocket, "GAME_OVER", strlen("GAME_OVER"), 0) <= 0) {
+                        std::cout << "Error sending GAME_OVER message" << std::endl;
+                        break;
+                    }
+
+                    std::string score_msg = "SCORE: " + std::to_string(client.score);
+                    // Send the score message to the client
+                    if (send(clientSocket, score_msg.c_str(), score_msg.length(), 0) <= 0) {
+                        std::cout << "Error sending SCORE message" << std::endl;
+                        break;
+                    }
+                    break;
+                }
+
+
+                // Move to the next question
+                questionIndex++;
             }
-            break;
         }
-
-        // Move to the next question
-        questionIndex++;
-
-        // If all questions have been asked, end the game
-        if (questionIndex >= questions.size()) {
-            break;
-        }
+       
     }
 
-    // Send client's score
-    std::string scoreMessage = "Your score: " + std::to_string(client.score) + "\n";
-    
-    std::cout<<scoreMessage<<std::endl;
-    if (send(clientSocket, scoreMessage.c_str(), scoreMessage.length(), 0) <= 0) {
-        std::cout << "Error sending score" << std::endl;
-    }
-
-    std::cout << "Client " << client.name << " disconnected" << std::endl;
 
     // Wait for a short duration before closing the socket
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
@@ -137,10 +167,12 @@ void handleClient(int clientSocket) {
     mutex.unlock();
 }
 
+
 int main() {
     int serverSocket;
     int port = 5555;
     struct sockaddr_in serverAddr {};
+
 
     // Create socket
     if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -148,10 +180,12 @@ int main() {
         return -1;
     }
 
+
     // Set up server address
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(port);
     serverAddr.sin_addr.s_addr = INADDR_ANY;
+
 
     // Bind the socket to the specified IP and port
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0) {
@@ -159,18 +193,22 @@ int main() {
         return -1;
     }
 
+
     // Listen for incoming connections
     if (listen(serverSocket, MAX_CLIENTS) < 0) {
         std::cerr << "Listening failed" << std::endl;
         return -1;
     }
 
+
     std::cout << "Server started. Listening on port " << port << std::endl;
+
 
     // Accept client connections and handle them in separate threads
     while (true) {
         struct sockaddr_in clientAddr {};
         socklen_t clientAddrSize = sizeof(clientAddr);
+
 
         // Accept a client connection
         int clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrSize);
@@ -179,13 +217,16 @@ int main() {
             continue;
         }
 
+
         // Handle the client in a separate thread
         std::thread clientThread(handleClient, clientSocket);
         clientThread.detach();
     }
 
+
     // Close the server socket
     close(serverSocket);
+
 
     return 0;
 }
