@@ -1,0 +1,11 @@
+dinhkt,1
+linhpham,2
+dinhkt,5
+dinhkt,1
+dinhkt,1
+dinhkt,1
+dkt,1
+dkt,1
+kt,1
+ktt,3
+kluong,1
